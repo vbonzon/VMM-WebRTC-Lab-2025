@@ -142,6 +142,8 @@ function create_peerconnection(localStream) {
   localStream.getTracks().forEach(track => {
     pc.addTrack(track, localStream);
   });
+
+  console.log("new peerconnection: ", pc);
   return pc;
 }
 
@@ -155,9 +157,12 @@ function add_peerconnection_handlers(peerConnection) {
   // ontrack -> handle_remote_track
   // ondatachannel -> handle_remote_datachannel
   console.log(peerConnection);
-  peerConnection.onicecandidate = (e) => {handle_local_icecandidate(e.candidate);};
+  /*peerConnection.onicecandidate = (e) => {handle_local_icecandidate(e.candidate);};
   peerConnection.ontrack = (e) => {handle_remote_track(e)};
-  peerConnection.ondatachannel = (e) => {handle_remote_datachannel(e)};
+  */
+  peerConnection.onicecandidate = handle_local_icecandidate;
+  peerConnection.ontrack = handle_remote_track;
+  peerConnection.ondatachannel = handle_remote_datachannel;
   
 
 }
@@ -216,7 +221,7 @@ async function handle_ok(answer) {
 async function handle_local_icecandidate(event) {
   console.log('Received local ICE candidate: ', event);
   // *** TODO ***: check if there is a new ICE candidate.
-  if(event.candidate){
+  if(event != null && event.candidate){
     // *** TODO ***: if yes, send a 'ice_candidate' message with the candidate to the peer
     socket.emit("ice_candidate", event.candidate);
   }
@@ -228,7 +233,7 @@ async function handle_local_icecandidate(event) {
 async function handle_remote_icecandidate(candidate) {
   console.log('Received remote ICE candidate: ', candidate);
   // *** TODO ***: add the received remote ICE candidate to the peerConnection 
-  peerConnection.addIceCandidate(candidate.ice);
+  peerConnection.addIceCandidate(candidate);
 
 }
 
@@ -258,9 +263,18 @@ function create_datachannel(peerConnection) {
 
   // *** TODO ***: create a dataChannel on the peerConnection
   //dataChannel = ...
+  dataChannel = peerConnection.createDataChannel("chat");
 
   // *** TODO ***: connect the handlers onopen and onmessage to the handlers below
   //dataChannel. ...
+
+  dataChannel.onopen = (e) => {
+    handle_datachannel_open(e);
+  }
+
+  dataChannel.onmessage = (e) => {
+    handle_datachannel_message(e);
+  }
 
 }
 
@@ -270,8 +284,15 @@ function handle_remote_datachannel(event) {
   console.log('Received remote dataChannel. I am Callee.');
 
   // *** TODO ***: get the data channel from the event
-
+  dataChannel = event.channel;
   // *** TODO ***: add event handlers for onopen and onmessage events to the dataChannel
+  dataChannel.onopen = (e) => {
+    handle_datachannel_open(e);
+  }
+
+  dataChannel.onmessage = (e) => {
+    handle_datachannel_message(e);
+  }
 
 }
 
@@ -290,11 +311,13 @@ function sendMessage() {
   document.getElementById('dataChannelOutput').value += '        ME: ' + message + '\n';
 
   // *** TODO ***: send the message through the dataChannel
+  dataChannel.send(message);
 
 }
 
 // Handle Message from peer event on dataChannel: display the message
 function handle_datachannel_message(event) {
+  console.log("new message: ",event);
   document.getElementById('dataChannelOutput').value += 'PEER: ' + event.data + '\n';
 }
 
@@ -318,19 +341,24 @@ function hangUp() {
 function closeStreams(){
   console.log("closing streams");
   // Switch off the local stream by stopping all tracks of the local stream
-  const localVideo = document.getElementById('localVideo')
-  const remoteVideo = document.getElementById('remoteVideo')
+  const localVideo = document.getElementById('localVideo');
+  const remoteVideo = document.getElementById('remoteVideo');
   // *** TODO ***: remove the tracks from localVideo and remoteVideo
-  localVideo.srcObject.getTracks().forEach(track => track.stop())
-  remoteVideo.srcObject.getTracks().forEach(track => track.stop())
+  if(localVideo.srcObject != null)
+    localVideo.srcObject.getTracks().forEach(track => track.stop());
+  if(remoteVideo.srcObject != null)
+    remoteVideo.srcObject.getTracks().forEach(track => track.stop());
+  
   // *** TODO ***: set localVideo and remoteVideo source objects to null
   localVideo.srcObject = null;
   remoteVideo.srcObject = null;
   // *** TODO ***: close the peerConnection and set it to null
-  peerConnection.close();
+  if(peerConnection != null)
+    peerConnection.close();
   peerConnection = null;
   // *** TODO ***: close the dataChannel and set it to null
-  dataChannel.close();
+  if(dataChannel != null)
+    dataChannel.close();
   dataChannel = null;
   document.getElementById('dataChannelOutput').value += '*** Channel is closed ***\n';
 }
